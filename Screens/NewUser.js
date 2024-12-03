@@ -19,7 +19,7 @@ export default function NewUser(props) {
 
   return (
     <ImageBackground
-      source={require("../assets/loginback.jpg")}
+      source={require("../assets/bg.jpg")}
       style={styles.container}
     >
       <StatusBar style="auto" />
@@ -56,6 +56,14 @@ export default function NewUser(props) {
         {/* Buttons */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => {
+              props.navigation.goBack();
+            }}
+          >
+            <Text style={styles.buttonText}>Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={styles.submitButton}
             onPress={() => {
               if (!email || !pwd || !confirmPwd) {
@@ -79,15 +87,6 @@ export default function NewUser(props) {
           >
             <Text style={styles.buttonText}>Submit</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => {
-              props.navigation.goBack();
-            }}
-          >
-            <Text style={styles.buttonText}>Back</Text>
-          </TouchableOpacity>
         </View>
       </View>
     </ImageBackground>
@@ -99,7 +98,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-  },
+   },
   card: {
     backgroundColor: "#0007",
     height: 400,

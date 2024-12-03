@@ -1,28 +1,25 @@
-import {
-  ImageBackground,
-  StyleSheet,
-  View,
-  Text,
-} from "react-native";
+import React, { useEffect } from "react";
+import { StyleSheet, useColorScheme } from "react-native";
 import { createMaterialBottomTabNavigator } from "@react-navigation/material-bottom-tabs";
-import ListProfils from"./Home/ListProfils";
+import ListProfils from "./Home/ListProfils";
 import Groupes from "./Home/Groupes";
 import MyProfil from "./Home/MyProfil";
 import Icon from "react-native-vector-icons/MaterialIcons";
-import { useEffect } from "react";
-import { useNavigation } from "@react-navigation/native";
 import firebase from "../Config";
 
 const Tab = createMaterialBottomTabNavigator();
-export default function Home(props) {
-  const auth = firebase.auth().currentUser.uid;
 
-  const navigation = useNavigation();
+export default function Home(props) {
+  const theme = useColorScheme();
+  const tabBarBackgroundColor = theme === "dark" ? "#333" : "#f8f8f8";
 
   useEffect(() => {
-    if (!auth) {
-      navigation.replace("Auth");
-    }
+    const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
+      if (!user) {
+        props.navigation.replace("Auth");
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   return (
@@ -30,26 +27,32 @@ export default function Home(props) {
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color }) => {
           let iconName;
-          let iconSize = focused ? 30 : 24; // Icon size
-          if (route.name === "ListProfils") {
-            iconName = "list"; // Icon name for ListProfils
-          } else if (route.name === "Groupes") {
-            iconName = "group"; // Icon name for Groupes
-          } else if (route.name === "MyProfile") {
-            iconName = "person"; // Icon name for MyProfile
-          }
-
-          // Return the icon component
-          return <Icon key={iconName} name={iconName} size={iconSize} color={color} />;
+          let iconSize = focused ? 30 : 24;
+          if (route.name === "ListProfils") iconName = "list";
+          if (route.name === "Groupes") iconName = "group";
+          if (route.name === "MyProfile") iconName = "person";
+          return <Icon name={iconName} size={iconSize} color={color} />;
         },
-        tabBarActiveTintColor: "#007aff", // Active tab color
-        tabBarInactiveTintColor: "gray",  // Inactive tab color
-        tabBarStyle: { backgroundColor: "#f8f8f8" }, // Tab bar background color
+        tabBarActiveTintColor: "#007aff",
+        tabBarInactiveTintColor: "gray",
+        tabBarStyle: { backgroundColor: tabBarBackgroundColor },
       })}
     >
-      <Tab.Screen name="ListProfils" component={ListProfils} />
-      <Tab.Screen name="Groupes" component={Groupes} />
-      <Tab.Screen name="MyProfile" component={MyProfil} />
+      <Tab.Screen
+        name="ListProfils"
+        component={ListProfils}
+        options={{ accessibilityLabel: "Profiles tab" }}
+      />
+      <Tab.Screen
+        name="Groupes"
+        component={Groupes}
+        options={{ accessibilityLabel: "Groups tab" }}
+      />
+      <Tab.Screen
+        name="MyProfile"
+        component={MyProfil}
+        options={{ accessibilityLabel: "My Profile tab" }}
+      />
     </Tab.Navigator>
   );
 }

@@ -9,38 +9,113 @@ import {
   TouchableHighlight,
   Image,
   TouchableOpacity,
+  ActivityIndicator,
   Linking,
 } from "react-native";
 import firebase from "../../Config";
-import Icon from "react-native-vector-icons/MaterialIcons"; // Import phone icon
+import Icon from "react-native-vector-icons/MaterialIcons";
+
 const database = firebase.database();
-const ref_tableProfils = database.ref("Tabledeprofils");
+const ref_tableProfils = database.ref("ProfilsTable");
 
 export default function ListProfils(props) {
   const [data, setData] = useState([]);
-  const userId = firebase.auth().currentUser.uid;
+  const [loading, setLoading] = useState(true);
+  const userId = firebase.auth().currentUser?.uid;
 
   useEffect(() => {
-    ref_tableProfils.on("value", (snapshot) => {
-      const d = [];
-      snapshot.forEach((unprofil) => {
-        d.push(unprofil.val());
-      });
-      setData(d);
+    const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
+      if (!user) {
+        props.navigation.replace("Auth");
+      }
     });
+
+    const fetchData = () => {
+      ref_tableProfils.on("value", (snapshot) => {
+        const profiles = [];
+        snapshot.forEach((unprofil) => {
+          profiles.push(unprofil.val());
+        });
+        setData(profiles);
+        setLoading(false);
+      });
+    };
+
+    fetchData();
 
     return () => {
       ref_tableProfils.off();
+      unsubscribe();
     };
-  }, []);
+  }, [userId]);
 
-  // Function to initiate a phone call
   const handleCall = (phoneNumber) => {
     const url = `tel:${phoneNumber}`;
-    Linking.openURL(url).catch((err) =>
-      alert("Unable to make a call. Check your phone settings.")
-    );
+    Linking.canOpenURL(url)
+      .then((supported) => {
+        if (!supported) {
+          alert("Phone calls are not supported on this device.");
+        } else {
+          return Linking.openURL(url);
+        }
+      })
+      .catch(() => alert("An error occurred while trying to make the call."));
   };
+
+  const renderItem = React.useCallback(
+    ({ item }) => {
+      return (
+        <TouchableHighlight
+          onPress={() => props.navigation.navigate("Chat", { profile: item })}
+          underlayColor="#ddd"
+          style={styles.contactContainer}
+        >
+          <View style={styles.contactInner}>
+            <Image
+              source={
+                item.profileImage
+                  ? { uri: item.profileImage }
+                  : require("../../assets/profil.png")
+              }
+              style={styles.profileImage}
+            />
+            <View style={styles.textContainer}>
+              <Text style={styles.contactName}>
+                {item.id === userId ? "MySelf" : item.nom}
+              </Text>
+              <Text style={styles.contactPseudo}>@{item.pseudo}</Text>
+            </View>
+            {item.telephone && (
+              <TouchableOpacity
+                onPress={() => handleCall(item.telephone)}
+                style={styles.phoneIcon}
+              >
+                <Icon name="phone" size={25} color="#4CAF50" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </TouchableHighlight>
+      );
+    },
+    [userId]
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007aff" />
+        <Text style={styles.loadingText}>Loading profiles...</Text>
+      </View>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>No profiles found.</Text>
+      </View>
+    );
+  }
 
   return (
     <ImageBackground
@@ -48,49 +123,11 @@ export default function ListProfils(props) {
       style={styles.container}
     >
       <StatusBar style="light" />
-      <Text style={styles.textstyle}>List profils</Text>
+      <Text style={styles.textstyle}>List Profils</Text>
       <FlatList
         data={data}
-        keyExtractor={(item) => item.id} // Use unique IDs as keys
-        renderItem={({ item }) => {
-          return (
-            <TouchableHighlight
-              onPress={() => {
-                props.navigation.navigate("Chat", { profile: item });
-              }}
-              underlayColor="#ddd"
-              style={styles.contactContainer}
-              key={item.id}
-            >
-              <View style={styles.contactInner}>
-                {/* Profile Image */}
-                <Image
-                  source={
-                    item.profileImage
-                      ? { uri: item.profileImage }
-                      : require("../../assets/profil.png")
-                  }
-                  style={styles.profileImage}
-                />
-                {/* Contact Info */}
-                <View style={styles.textContainer}>
-                  <Text style={styles.contactName}>{item.id === userId ? "MySelf" : item.nom}</Text>
-                  <Text style={styles.contactPseudo}>@{item.pseudo}</Text>
-                </View>
-
-                {/* Phone Icon */}
-                {item.telephone && (
-                  <TouchableOpacity
-                    onPress={() => handleCall(item.telephone)}
-                    style={styles.phoneIcon}
-                  >
-                    <Icon name="phone" size={25} color="#4CAF50" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </TouchableHighlight>
-          );
-        }}
+        // keyExtractor={(item, index) =>
+        //   item.id ? item.id.toSt                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
         style={styles.listContainer}
       />
     </ImageBackground>
@@ -98,29 +135,18 @@ export default function ListProfils(props) {
 }
 
 const styles = StyleSheet.create({
-  textinputstyle: {
-    fontWeight: "bold",
-    backgroundColor: "#0004",
-    fontSize: 20,
-    color: "#fff",
-    width: "75%",
-    height: 50,
-    borderRadius: 10,
-    margin: 5,
+  container: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "flex-start",
   },
   textstyle: {
-    fontSize: 40,
+    fontSize: 32,
     fontFamily: "serif",
     color: "white",
     fontWeight: "bold",
-    paddingTop: 45,
-  },
-  container: {
-    color: "blue",
-    flex: 1,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "flex-start",
+    marginTop: 40,
+    marginBottom: 20,
   },
   listContainer: {
     width: "100%",
@@ -133,8 +159,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderRadius: 8,
     padding: 10,
-    elevation: 3, // For a subtle shadow effect (Android)
-    shadowColor: "#000", // For iOS shadow
+    elevation: 3,
+    shadowColor: "#000",
     shadowOpacity: 0.2,
     shadowOffset: { width: 0, height: 1 },
     shadowRadius: 3,
@@ -150,7 +176,7 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 25,
     marginRight: 10,
-    backgroundColor: "#ccc", // Placeholder background
+    backgroundColor: "#ccc",
   },
   textContainer: {
     flex: 1,
@@ -170,5 +196,15 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     alignItems: "center",
     justifyContent: "center",
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  loadingText: {
+    fontSize: 18,
+    color: "#888",
   },
 });

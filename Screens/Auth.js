@@ -1,4 +1,4 @@
-import { StatusBar } from "expo-status-bar";
+import React, { useState } from "react";
 import {
   ImageBackground,
   StyleSheet,
@@ -6,19 +6,40 @@ import {
   TextInput,
   View,
   TouchableOpacity,
+  Alert,
 } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import firebase from "../Config";
-import { useNavigation } from "@react-navigation/native";
 
 const auth = firebase.auth();
 
-export default function Auth(props) {
-  let email, password;
-  const navigation = useNavigation();
+export default function Auth({ navigation }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert("Input Error", "Please fill in both email and password.");
+      return;
+    }
+
+    setLoading(true);
+    auth
+      .signInWithEmailAndPassword(email, password)
+      .then(() => {
+        setLoading(false);
+        navigation.replace("Home"); 
+      })
+      .catch((error) => {
+        setLoading(false);
+        Alert.alert("Login Failed", error.message);
+      });
+  };
 
   return (
     <ImageBackground
-      source={require("../assets/loginback.jpg")}
+      source={require("../assets/bg.jpg")}
       style={styles.container}
     >
       <StatusBar style="auto" />
@@ -30,58 +51,57 @@ export default function Auth(props) {
           keyboardType="email-address"
           placeholder="Email"
           placeholderTextColor="black"
-          onChangeText={(text) => {
-            email = text;
-          }}
+          value={email}
+          onChangeText={setEmail}
           style={styles.textInput}
+          accessible
+          accessibilityLabel="Email Input"
         />
 
         {/* Password Input */}
         <TextInput
           placeholder="Password"
           placeholderTextColor="black"
-          secureTextEntry={true}
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
           style={styles.textInput}
-          onChangeText={(text) => {
-            password = text;
-          }}
+          accessible
+          accessibilityLabel="Password Input"
         />
 
         {/* Buttons */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
-            style={styles.submitButton}
-            onPress={() => {
-              auth
-                .signInWithEmailAndPassword(email, password)
-                .then(() => {
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: "Home" }],
-                  });
-                })
-                .catch((error) => {
-                  alert(error.message);
-                });
-            }}
+            style={styles.exitButton}
+            onPress={() => navigation.goBack()} 
+            accessible
+            accessibilityLabel="Exit Button"
           >
-            <Text style={styles.buttonText}>Submit</Text>
+            <Text style={styles.buttonText}>Exit</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.exitButton}>
-            <Text style={styles.buttonText}>Exit</Text>
+          <TouchableOpacity
+            style={[styles.submitButton, loading && styles.disabledButton]}
+            onPress={handleLogin}
+            disabled={loading}
+            accessible
+            accessibilityLabel="Submit Button"
+          >
+            <Text style={styles.buttonText}>
+              {loading ? "Loading..." : "Submit"}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Create New User */}
-        <Text
-          style={styles.newUserText}
-          onPress={() => {
-            props.navigation.navigate("NewUser");
-          }}
+        {/* Navigate to Sign-Up Screen */}
+        <TouchableOpacity
+          onPress={() => navigation.navigate("NewUser")}
+          accessible
+          accessibilityLabel="Create New User Link"
         >
-          Create new user
-        </Text>
+          <Text style={styles.newUserText}>Create new user</Text>
+        </TouchableOpacity>
       </View>
     </ImageBackground>
   );
@@ -148,6 +168,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
+  disabledButton: {
+    backgroundColor: "#A5D6A7",
+  },
   newUserText: {
     width: "100%",
     textAlign: "center",
@@ -155,6 +178,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontStyle: "italic",
     marginTop: 15,
+    fontSize: 16,
     textDecorationLine: "underline",
   },
 });

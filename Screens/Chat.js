@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,23 +9,23 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Alert,
 } from "react-native";
-import firebase from "../Config"; // Update this to your Firebase config file
+import firebase from "../Config";
 import { SafeAreaView } from "react-native-safe-area-context";
-const reflesdiscussions = firebase.database().ref("lesdiscussions");
 
+const reflesdiscussions = firebase.database().ref("TheDiscussions");
 
 export default function Chat(props) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
-  const profile = props.route.params.profile; // Name of the person you're chatting with
-  const userId = firebase.auth().currentUser.uid; // Your unique Firebase ID
-  const iddisc = userId > profile.id ? userId + profile.id : profile.id + userId;
+  const [isTyping, setIsTyping] = useState(false);
+  const profile = props.route.params.profile;
+  const userId = firebase.auth().currentUser.uid;
+  const iddisc =
+    userId > profile.id ? userId + profile.id : profile.id + userId;
   const ref_unediscussion = reflesdiscussions.child(iddisc);
 
-  const database = firebase.database();
-
-  // Fetch messages in real-time from Firebase
   useEffect(() => {
     ref_unediscussion.on("value", (snapshot) => {
       const fetchedMessages = [];
@@ -36,56 +36,72 @@ export default function Chat(props) {
       });
       setMessages(fetchedMessages.reverse());
     });
-  
+
+    ref_unediscussion.child("typing").on("value", (snapshot) => {
+      if (snapshot.val() && snapshot.val() !== userId) {
+        setIsTyping(true);
+      } else {
+        setIsTyping(false);
+      }
+    });
+
     return () => ref_unediscussion.off();
   }, []);
 
-// Update typing status in Firebase
-const handleInputChange = (text) => {
-  setInputText(text);
-};
+  const handleInputChange = (text) => {
+    setInputText(text);
+    ref_unediscussion.child("typing").set(text ? userId : null);
+  };
 
-  // Send a new message to Firebase
   const sendMessage = () => {
     if (inputText.trim() === "") return;
     const newMessage = {
       id: Date.now().toString(),
       text: inputText,
-      sender: userId, // You can change this logic based on authentication
+      sender: userId,
       date: new Date().toISOString(),
-      receiver: profile.id
+      receiver: profile.id,
     };
 
     const key = ref_unediscussion.push().key;
     const ref_unediscussion_key = ref_unediscussion.child(key);
-    ref_unediscussion_key.set(newMessage);
-    setInputText("");
+    ref_unediscussion_key
+      .set(newMessage)
+      .then(() => {
+        ref_unediscussion.child("typing").set(null);
+        setInputText("");
+      })
+      .catch((error) => {
+        console.error("Error sending message:", error);
+        Alert.alert("Error", "Failed to send the message.");
+      });
   };
 
-  // Render a single message
   const renderMessage = ({ item }) => {
     const isMe = item.sender === userId;
+    const formattedDate = new Date(item.date).toLocaleTimeString();
+
     return (
       <TouchableOpacity
-      style={[
-        styles.messageContainer,
-        isMe ? styles.myMessage : styles.otherMessage,
-      ]}
-    >
-      <Text style={styles.messageText}>{item.text}</Text>
-    </TouchableOpacity>
+        style={[
+          styles.messageContainer,
+          isMe ? styles.myMessage : styles.otherMessage,
+        ]}
+      >
+        <Text style={styles.messageText}>{item.text}</Text>
+        <Text style={styles.timestamp}>{formattedDate}</Text>
+      </TouchableOpacity>
     );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Chat Header */}
       <View style={styles.header}>
         <Image
           source={
-            profile.profileImage // Check if a profile picture URL exists
-              ? { uri: profile.profileImage } // If a profile picture URL exists, use it
-              : require("../assets/profil.png") // Default image if no URL
+            profile.profileImage
+              ? { uri: profile.profileImage }
+              : require("../assets/profil.png")
           }
           style={styles.profileImage}
         />
@@ -94,7 +110,6 @@ const handleInputChange = (text) => {
         </Text>
       </View>
 
-      {/* Chat Messages */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flexGrow}
@@ -104,10 +119,10 @@ const handleInputChange = (text) => {
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messagesList}
-          inverted // Scrolls to the bottom
+          inverted
         />
+        {isTyping && <Text style={styles.typingIndicator}>Typing...</Text>}
 
-        {/* Input Field */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.textInput}
@@ -142,12 +157,12 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 18,
     fontWeight: "bold",
-    marginLeft: 10, // Add spacing between the photo and text
+    marginLeft: 10,
   },
   profileImage: {
     width: 50,
     height: 50,
-    borderRadius: 25, // Circular image
+    borderRadius: 25,
   },
   messagesList: {
     paddingHorizontal: 10,
@@ -170,6 +185,18 @@ const styles = StyleSheet.create({
   messageText: {
     color: "#fff",
     fontSize: 16,
+  },
+  timestamp: {
+    fontSize: 10,
+    color: "#ccc",
+    alignSelf: "flex-end",
+    marginTop: 5,
+  },
+  typingIndicator: {
+    textAlign: "center",
+    fontStyle: "italic",
+    marginBottom: 10,
+    color: "gray",
   },
   inputContainer: {
     flexDirection: "row",

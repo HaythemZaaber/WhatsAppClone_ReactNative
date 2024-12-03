@@ -12,13 +12,11 @@ import {
   View,
 } from "react-native";
 import firebase from "../../Config";
-import { supabase } from "../../Config/initSupabase"; // Import Supabase client
+import { supabase } from "../../Config/initSupabase";
 import * as ImagePicker from "expo-image-picker";
-import { decode } from "base64-arraybuffer";
-import { useNavigation } from "@react-navigation/native";
 
 const database = firebase.database();
-const ref_tableProfils = database.ref("Tabledeprofils");
+const ref_tableProfils = database.ref("ProfilsTable");
 
 export default function MyProfil(props) {
   const [nom, setNom] = useState("");
@@ -26,12 +24,10 @@ export default function MyProfil(props) {
   const [telephone, setTelephone] = useState("");
   const [isDefaultImage, setIsDefaultImage] = useState(true);
   const [uriImage, setUriImage] = useState("");
-  const userId = firebase.auth().currentUser.uid; // Get the authenticated user's ID
-  const navigation = useNavigation();
+  const userId = firebase.auth().currentUser.uid;
 
-  // Fetch user data on mount
   useEffect(() => {
-    const userProfileRef = ref_tableProfils.child(`unprofil${userId}`);
+    const userProfileRef = ref_tableProfils.child(`Profil${userId}`);
     userProfileRef.on("value", (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -45,23 +41,25 @@ export default function MyProfil(props) {
       }
     });
 
-    return () => userProfileRef.off(); // Cleanup listener on unmount
+    return () => userProfileRef.off();
   }, []);
 
   // Image Picker Handler
   const handleImagePick = async () => {
     try {
-      // Request media library permissions
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permissionResult =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permissionResult.granted) {
-        Alert.alert("Permission Denied", "You need to allow access to your media library to select an image.");
+        Alert.alert(
+          "Permission Denied",
+          "You need to allow access to your media library to select an image."
+        );
         return;
       }
 
-      // Launch the image picker
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images", "videos"],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
@@ -69,41 +67,65 @@ export default function MyProfil(props) {
       });
 
       if (!result.canceled) {
-        const uri = result.assets[0].base64;
-        if(!uri) throw new Error("Failed to get image base64 data.");
-        setUriImage(result.assets[0].uri);
+        const uri = result.assets[0].uri;
+        if (!uri) throw new Error("Failed to get image URI.");
+        setUriImage(uri);
         setIsDefaultImage(false);
-        //Upload to Supabase
+        console.log("uri:", uri);
+
         await uploadImageToSupabase(uri);
       }
     } catch (error) {
+      console.error("Error picking image:", error);
       Alert.alert("Error", "Failed to pick image.");
     }
   };
+
   // Upload Image to Supabase Storage
   const uploadImageToSupabase = async (uri) => {
     try {
-      const fileName = `${userId}-${Date.now()}.jpg`; // Generate unique file name
-      // const response = await fetch(uri);
-      // const blob = await response.blob();
-      
+      const fileExt = uri.split(".").pop(); // Get file extension
+      const fileName = `${userId}-${Date.now()}.${fileExt}`; // Generate file name
+      const filePath = `profileImages/${fileName}`; // Define file path
+
+      // Convert image URI to Blob
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      // Upload file directly to Supabase Storage
       const { data, error } = await supabase.storage
-        .from("profile-images") // Bucket name in Supabase
-        .upload(fileName, decode(uri), { contentType: "image/jpeg" });
-      
+        .from("profileImages")
+        .upload(filePath, blob, {
+          cacheControl: "3600",
+          contentType: blob.type,
+        });
+
       if (error) {
-        console.log(error);
-        throw error;
+        console.error("Supabase upload error:", error);
+        throw new Error("Failed to upload image to Supabase.");
       }
 
-      const imageUrl = process.env.EXPO_PUBLIC_SUPABASE_URL + "/storage/v1/object/public/" + data.fullPath;
+      console.log("Supabase upload successful:", data);
 
-      //Save URL to Firebase
-      await ref_tableProfils.child(`unprofil${userId}`).update({
-        profileImage: imageUrl,
+      // Get public URL for the uploaded image
+      const { publicUrl } = supabase.storage
+        .from("profileImages")
+        .getPublicUrl(filePath);
+
+      if (!publicUrl) {
+        throw new Error("Failed to retrieve public URL.");
+      }
+
+      console.log("Public URL:", publicUrl);
+
+      // Update Firebase with the public URL
+      await ref_tableProfils.child(`Profil${userId}`).update({
+        profileImage: publicUrl,
       });
-      // Alert.alert("Success", "Profile picture updated!");
+
+      Alert.alert("Success", "Profile picture updated!");
     } catch (error) {
+      console.error("Error uploading image:", error);
       Alert.alert("Error", "Failed to upload image.");
     }
   };
@@ -114,13 +136,13 @@ export default function MyProfil(props) {
       return;
     }
 
-    const userProfileRef = ref_tableProfils.child(`unprofil${userId}`);
+    const userProfileRef = ref_tableProfils.child(`Profil${userId}`);
     userProfileRef
       .update({
-        id : userId,
-        nom : nom,
-        pseudo : pseudo,
-        telephone : telephone,
+        id: userId,
+        nom,
+        pseudo,
+        telephone,
       })
       .then(() => Alert.alert("Success", "Profile updated successfully!"))
       .catch((error) => Alert.alert("Error", error.message));
@@ -148,7 +170,7 @@ export default function MyProfil(props) {
 
         <TouchableOpacity style={styles.cameraIcon} onPress={handleImagePick}>
           <Image
-            source={require("../../assets/camera-icon.png")} // Replace with your camera icon
+            source={require("../../assets/camera-icon.png")}
             style={{ width: 30, height: 30 }}
           />
         </TouchableOpacity>
@@ -156,7 +178,7 @@ export default function MyProfil(props) {
 
       <TextInput
         value={nom}
-        onChangeText={(text) => setNom(text)}
+        onChangeText={setNom}
         textAlign="center"
         placeholderTextColor="#fff"
         placeholder="Nom"
@@ -165,7 +187,7 @@ export default function MyProfil(props) {
       />
       <TextInput
         value={pseudo}
-        onChangeText={(text) => setPseudo(text)}
+        onChangeText={setPseudo}
         textAlign="center"
         placeholderTextColor="#fff"
         placeholder="Pseudo"
@@ -174,7 +196,7 @@ export default function MyProfil(props) {
       />
       <TextInput
         value={telephone}
-        onChangeText={(text) => setTelephone(text)}
+        onChangeText={setTelephone}
         placeholderTextColor="#fff"
         textAlign="center"
         placeholder="Numero"
@@ -192,8 +214,12 @@ export default function MyProfil(props) {
       </TouchableHighlight>
       <TouchableHighlight
         onPress={() => {
-          firebase.auth().signOut()
-          navigation.replace("Auth")
+          firebase
+            .auth()
+            .signOut()
+            .then(() => {
+              props.navigation.replace("Auth");
+            });
         }}
         activeOpacity={0.5}
         underlayColor="#DDDDDD"
@@ -267,5 +293,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 5,
     marginTop: 20,
-    },
+  },
 });
