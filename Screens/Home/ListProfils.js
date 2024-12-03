@@ -31,7 +31,7 @@ export default function ListProfils(props) {
     });
 
     const fetchData = () => {
-      ref_tableProfils.on("value", (snapshot) => {
+      const listener = ref_tableProfils.on("value", (snapshot) => {
         const profiles = [];
         snapshot.forEach((unprofil) => {
           profiles.push(unprofil.val());
@@ -39,17 +39,24 @@ export default function ListProfils(props) {
         setData(profiles);
         setLoading(false);
       });
+
+      return () => ref_tableProfils.off("value", listener);
     };
 
-    fetchData();
+    const listenerCleanup = fetchData();
 
     return () => {
-      ref_tableProfils.off();
+      listenerCleanup();
       unsubscribe();
     };
-  }, [userId]);
+  }, [userId, props.navigation]);
 
   const handleCall = (phoneNumber) => {
+    if (!phoneNumber) {
+      alert("Invalid phone number.");
+      return;
+    }
+
     const url = `tel:${phoneNumber}`;
     Linking.canOpenURL(url)
       .then((supported) => {
@@ -62,42 +69,37 @@ export default function ListProfils(props) {
       .catch(() => alert("An error occurred while trying to make the call."));
   };
 
-  const renderItem = React.useCallback(
-    ({ item }) => {
-      return (
-        <TouchableHighlight
-          onPress={() => props.navigation.navigate("Chat", { profile: item })}
-          underlayColor="#ddd"
-          style={styles.contactContainer}
-        >
-          <View style={styles.contactInner}>
-            <Image
-              source={
-                item.profileImage
-                  ? { uri: item.profileImage }
-                  : require("../../assets/profil.png")
-              }
-              style={styles.profileImage}
-            />
-            <View style={styles.textContainer}>
-              <Text style={styles.contactName}>
-                {item.id === userId ? "MySelf" : item.nom}
-              </Text>
-              <Text style={styles.contactPseudo}>@{item.pseudo}</Text>
-            </View>
-            {item.telephone && (
-              <TouchableOpacity
-                onPress={() => handleCall(item.telephone)}
-                style={styles.phoneIcon}
-              >
-                <Icon name="phone" size={25} color="#4CAF50" />
-              </TouchableOpacity>
-            )}
-          </View>
-        </TouchableHighlight>
-      );
-    },
-    [userId]
+  const renderItem = ({ item }) => (
+    <TouchableHighlight
+      onPress={() => props.navigation.navigate("Chat", { profile: item })}
+      underlayColor="#ddd"
+      style={styles.contactContainer}
+    >
+      <View style={styles.contactInner}>
+        <Image
+          source={
+            item.profileImage
+              ? { uri: item.profileImage }
+              : require("../../assets/profil.png")
+          }
+          style={styles.profileImage}
+        />
+        <View style={styles.textContainer}>
+          <Text style={styles.contactName}>
+            {item.id === userId ? "MySelf" : item.nom}
+          </Text>
+          <Text style={styles.contactPseudo}>@{item.pseudo || "Unknown"}</Text>
+        </View>
+        {item.telephone && (
+          <TouchableOpacity
+            onPress={() => handleCall(item.telephone)}
+            style={styles.phoneIcon}
+          >
+            <Icon name="phone" size={25} color="#4CAF50" />
+          </TouchableOpacity>
+        )}
+      </View>
+    </TouchableHighlight>
   );
 
   if (loading) {
@@ -126,8 +128,8 @@ export default function ListProfils(props) {
       <Text style={styles.textstyle}>List Profils</Text>
       <FlatList
         data={data}
-        // keyExtractor={(item, index) =>
-        //   item.id ? item.id.toSt                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+        keyExtractor={(item, index) => item.id || index.toString()}
+        renderItem={renderItem}
         style={styles.listContainer}
       />
     </ImageBackground>

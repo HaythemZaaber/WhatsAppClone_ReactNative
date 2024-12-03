@@ -44,7 +44,6 @@ export default function MyProfil(props) {
     return () => userProfileRef.off();
   }, []);
 
-  // Image Picker Handler
   const handleImagePick = async () => {
     try {
       const permissionResult =
@@ -81,44 +80,32 @@ export default function MyProfil(props) {
     }
   };
 
-  // Upload Image to Supabase Storage
   const uploadImageToSupabase = async (uri) => {
     try {
-      const fileExt = uri.split(".").pop(); // Get file extension
-      const fileName = `${userId}-${Date.now()}.${fileExt}`; // Generate file name
-      const filePath = `profileImages/${fileName}`; // Define file path
+      const fileExt = uri.split(".").pop();
+      const fileName = `${userId}-${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+      console.log(filePath);
 
-      // Convert image URI to Blob
       const response = await fetch(uri);
       const blob = await response.blob();
 
-      // Upload file directly to Supabase Storage
       const { data, error } = await supabase.storage
         .from("profileImages")
-        .upload(filePath, blob, {
-          cacheControl: "3600",
-          contentType: blob.type,
-        });
+        .upload(filePath, uri, { contentType: `image/${fileExt}` });
 
       if (error) {
-        console.error("Supabase upload error:", error);
-        throw new Error("Failed to upload image to Supabase.");
+        console.error("Upload error:", error);
+        throw error;
       }
 
-      console.log("Supabase upload successful:", data);
-
-      // Get public URL for the uploaded image
-      const { publicUrl } = supabase.storage
+      const { data: publicUrlData } = supabase.storage
         .from("profileImages")
         .getPublicUrl(filePath);
 
-      if (!publicUrl) {
-        throw new Error("Failed to retrieve public URL.");
-      }
-
+      const publicUrl = publicUrlData.publicUrl;
       console.log("Public URL:", publicUrl);
 
-      // Update Firebase with the public URL
       await ref_tableProfils.child(`Profil${userId}`).update({
         profileImage: publicUrl,
       });
