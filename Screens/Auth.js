@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ImageBackground,
   StyleSheet,
@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import firebase from "../Config";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const auth = firebase.auth();
 
@@ -17,25 +18,69 @@ export default function Auth({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
-  const handleLogin = () => {
+  useEffect(() => {
+    const autoLogin = async () => {
+      try {
+        const savedEmail = await AsyncStorage.getItem("email");
+        const savedPassword = await AsyncStorage.getItem("password");
+        if (savedEmail && savedPassword) {
+          setLoading(true);
+          auth
+            .signInWithEmailAndPassword(savedEmail, savedPassword)
+            .then(() => {
+              setLoading(false);
+              navigation.replace("Home");
+            })
+            .catch((error) => {
+              setLoading(false);
+              console.error("Auto-login failed", error);
+            });
+        }
+      } catch (error) {
+        console.error("Error checking stored credentials", error);
+      }
+    };
+    autoLogin();
+  }, []);
+
+  const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
       Alert.alert("Input Error", "Please fill in both email and password.");
       return;
     }
 
     setLoading(true);
+
     auth
       .signInWithEmailAndPassword(email, password)
-      .then(() => {
+      .then(async () => {
         setLoading(false);
-        navigation.replace("Home"); 
+        if (rememberMe) {
+          try {
+            await AsyncStorage.setItem("email", email);
+            await AsyncStorage.setItem("password", password);
+          } catch (error) {
+            console.error("Failed to save credentials", error);
+          }
+        } else {
+          try {
+            await AsyncStorage.removeItem("email");
+            await AsyncStorage.removeItem("password");
+          } catch (error) {
+            console.error("Failed to clear credentials", error);
+          }
+        }
+        navigation.replace("Home");
       })
       .catch((error) => {
         setLoading(false);
         Alert.alert("Login Failed", error.message);
       });
   };
+
+  const toggleRememberMe = () => setRememberMe(!rememberMe);
 
   return (
     <ImageBackground
@@ -46,7 +91,6 @@ export default function Auth({ navigation }) {
       <View style={styles.card}>
         <Text style={styles.welcomeText}>Bienvenue</Text>
 
-        {/* Email Input */}
         <TextInput
           keyboardType="email-address"
           placeholder="Email"
@@ -58,7 +102,6 @@ export default function Auth({ navigation }) {
           accessibilityLabel="Email Input"
         />
 
-        {/* Password Input */}
         <TextInput
           placeholder="Password"
           placeholderTextColor="black"
@@ -70,11 +113,22 @@ export default function Auth({ navigation }) {
           accessibilityLabel="Password Input"
         />
 
-        {/* Buttons */}
+        <View style={styles.checkboxContainer}>
+          <TouchableOpacity onPress={toggleRememberMe} style={styles.checkbox}>
+            <View
+              style={[
+                styles.checkboxInner,
+                rememberMe && styles.checkboxChecked,
+              ]}
+            />
+          </TouchableOpacity>
+          <Text style={styles.checkboxLabel}>Remember Me</Text>
+        </View>
+
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={styles.exitButton}
-            onPress={() => navigation.goBack()} 
+            onPress={() => navigation.goBack()}
             accessible
             accessibilityLabel="Exit Button"
           >
@@ -94,7 +148,6 @@ export default function Auth({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Navigate to Sign-Up Screen */}
         <TouchableOpacity
           onPress={() => navigation.navigate("NewUser")}
           accessible
@@ -116,7 +169,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#0007",
-    height: 350,
+    height: 400,
     width: "90%",
     alignItems: "center",
     justifyContent: "center",
@@ -140,6 +193,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 15,
     color: "black",
+  },
+  checkboxContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: "#4CAF50",
+    marginRight: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxInner: {
+    width: 12,
+    height: 12,
+    backgroundColor: "transparent",
+  },
+  checkboxChecked: {
+    backgroundColor: "#4CAF50",
+  },
+  checkboxLabel: {
+    fontSize: 16,
+    color: "#fff",
   },
   buttonContainer: {
     flexDirection: "row",

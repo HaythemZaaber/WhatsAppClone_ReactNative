@@ -17,6 +17,7 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 
 const database = firebase.database();
 const ref_tableProfils = database.ref("ProfilsTable");
+const ref_discussions = database.ref("TheDiscussions");
 
 export default function ListProfils(props) {
   const [data, setData] = useState([]);
@@ -31,16 +32,50 @@ export default function ListProfils(props) {
     });
 
     const fetchData = () => {
-      const listener = ref_tableProfils.on("value", (snapshot) => {
+      const listener = ref_tableProfils.on("value", async (snapshot) => {
         const profiles = [];
+        const promises = [];
+
         snapshot.forEach((unprofil) => {
-          profiles.push(unprofil.val());
+          const profileData = unprofil.val();
+          if (profileData.id !== userId) {
+            profiles.push(profileData);
+            promises.push(fetchLastMessage(profileData.id));
+          }
         });
+
+        const lastMessages = await Promise.all(promises);
+
+        profiles.forEach((profile, index) => {
+          profile.lastMessage = lastMessages[index];
+        });
+
         setData(profiles);
         setLoading(false);
       });
 
       return () => ref_tableProfils.off("value", listener);
+    };
+
+    const fetchLastMessage = (profileId) => {
+      return new Promise((resolve) => {
+        const discussionId =
+          userId > profileId ? userId + profileId : profileId + userId;
+
+        ref_discussions
+          .child(discussionId)
+          .orderByKey()
+          .limitToLast(1)
+          .once("value", (snapshot) => {
+            const message = snapshot.val();
+            if (message) {
+              const [key] = Object.keys(message);
+              resolve(message[key].text || "");
+            } else {
+              resolve("");
+            }
+          });
+      });
     };
 
     const listenerCleanup = fetchData();
@@ -76,19 +111,32 @@ export default function ListProfils(props) {
       style={styles.contactContainer}
     >
       <View style={styles.contactInner}>
-        <Image
-          source={
-            item.profileImage
-              ? { uri: item.profileImage }
-              : require("../../assets/profil.png")
-          }
-          style={styles.profileImage}
-        />
+        <View style={styles.statusContainer}>
+          <View
+            style={[
+              styles.statusIndicator,
+              { backgroundColor: item.status === "online" ? "green" : "gray" },
+            ]}
+          />
+          <Image
+            source={
+              item.profileImage
+                ? { uri: item.profileImage }
+                : require("../../assets/profil.png")
+            }
+            style={styles.profileImage}
+          />
+        </View>
         <View style={styles.textContainer}>
           <Text style={styles.contactName}>
             {item.id === userId ? "MySelf" : item.nom}
           </Text>
           <Text style={styles.contactPseudo}>@{item.pseudo || "Unknown"}</Text>
+          {item.lastMessage && (
+            <Text style={styles.lastMessage} numberOfLines={1}>
+              {item.lastMessage}
+            </Text>
+          )}
         </View>
         {item.telephone && (
           <TouchableOpacity
@@ -173,15 +221,25 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     flex: 1,
   },
+  statusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  statusIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 5,
+  },
   profileImage: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    marginRight: 10,
     backgroundColor: "#ccc",
   },
   textContainer: {
     flex: 1,
+    marginLeft: 10,
   },
   contactName: {
     fontSize: 16,
@@ -191,6 +249,11 @@ const styles = StyleSheet.create({
   contactPseudo: {
     fontSize: 14,
     color: "#666",
+  },
+  lastMessage: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 5,
   },
   phoneIcon: {
     padding: 10,

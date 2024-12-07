@@ -14,6 +14,7 @@ import {
 import firebase from "../../Config";
 import { supabase } from "../../Config/initSupabase";
 import * as ImagePicker from "expo-image-picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const database = firebase.database();
 const ref_tableProfils = database.ref("ProfilsTable");
@@ -71,13 +72,46 @@ export default function MyProfil(props) {
         if (!uri) throw new Error("Failed to get image URI.");
         setUriLocalImage(uri);
         setIsDefaultImage(false);
-        console.log("uri:", uri);
+        console.log("Picked image URI:", uri);
 
         await uploadImageToSupabase(uri);
       }
     } catch (error) {
       console.error("Error picking image:", error);
       Alert.alert("Error", "Failed to pick image.");
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (!permissionResult.granted) {
+        Alert.alert(
+          "Permission Denied",
+          "You need to allow access to your camera to take a photo."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        const uri = result.assets[0].uri;
+        if (!uri) throw new Error("Failed to get image URI.");
+        setUriLocalImage(uri);
+        setIsDefaultImage(false);
+        console.log("Captured image URI:", uri);
+
+        await uploadImageToSupabase(uri);
+      }
+    } catch (error) {
+      console.error("Error capturing photo:", error);
+      Alert.alert("Error", "Failed to capture photo.");
     }
   };
 
@@ -88,7 +122,7 @@ export default function MyProfil(props) {
       const arraybuffer = await new Response(blob).arrayBuffer();
 
       if (!userId) {
-        console.error("userId est invalide:", userId);
+        console.error("userId is invalid:", userId);
         return null;
       }
 
@@ -99,7 +133,7 @@ export default function MyProfil(props) {
 
       if (uploadError) {
         console.error(
-          "Erreur lors de l'upload de l'image:",
+          "Error uploading image:",
           uploadError.message
         );
         return null;
@@ -111,25 +145,25 @@ export default function MyProfil(props) {
 
       if (getError) {
         console.error(
-          "Erreur lors de l'obtention de l'URL de l'image:",
+          "Error getting image public URL:",
           getError.message
         );
         return null;
       }
 
       if (!data || !data.publicUrl) {
-        console.error("L'URL publique n'est pas disponible:", data);
+        console.error("Public URL is not available:", data);
         return null;
       }
 
-      console.log("URL publique de l'image:", data.publicUrl);
+      console.log("Public image URL:", data.publicUrl);
       await ref_tableProfils.child(`Profil${userId}`).update({
         profileImage: data.publicUrl,
       });
 
       Alert.alert("Success", "Profile picture updated!");
     } catch (error) {
-      console.error("Erreur lors du téléchargement de l'image:", error);
+      console.error("Error uploading image:", error);
       return null;
     }
   };
@@ -151,6 +185,7 @@ export default function MyProfil(props) {
       .then(() => Alert.alert("Success", "Profile updated successfully!"))
       .catch((error) => Alert.alert("Error", error.message));
   };
+
   return (
     <ImageBackground
       source={require("../../assets/imgbleu.jpg")}
@@ -172,6 +207,13 @@ export default function MyProfil(props) {
         </TouchableHighlight>
 
         <TouchableOpacity style={styles.cameraIcon} onPress={pickImage}>
+          <Image
+            source={require("../../assets/camera-icon.png")}
+            style={{ width: 30, height: 30 }}
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.takePhotoIcon} onPress={takePhoto}>
           <Image
             source={require("../../assets/camera-icon.png")}
             style={{ width: 30, height: 30 }}
@@ -216,19 +258,21 @@ export default function MyProfil(props) {
         <Text style={{ color: "#FFF", fontSize: 24 }}>Save</Text>
       </TouchableHighlight>
       <TouchableHighlight
-        onPress={() => {
-          firebase
-            .auth()
-            .signOut()
-            .then(() => {
-              props.navigation.replace("Auth");
-            });
+        onPress={async () => {
+          try {
+            await firebase.auth().signOut();
+            await AsyncStorage.removeItem("email");
+            await AsyncStorage.removeItem("password");
+            props.navigation.replace("Auth");
+          } catch (error) {
+            Alert.alert("Logout Error", error.message);
+          }
         }}
         activeOpacity={0.5}
         underlayColor="#DDDDDD"
         style={styles.deconnectionButton}
       >
-        <Text style={{ color: "#FFF", fontSize: 24 }}>Deconnection</Text>
+        <Text style={{ color: "#FFF", fontSize: 24 }}>Sign Out</Text>
       </TouchableHighlight>
     </ImageBackground>
   );
@@ -247,6 +291,14 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 10,
     right: 10,
+    backgroundColor: "#FFF",
+    borderRadius: 15,
+    padding: 5,
+  },
+  takePhotoIcon: {
+    position: "absolute",
+    bottom: 10,
+    left: 10,
     backgroundColor: "#FFF",
     borderRadius: 15,
     padding: 5,
