@@ -23,7 +23,9 @@ export default function MyProfil(props) {
   const [pseudo, setPseudo] = useState("");
   const [telephone, setTelephone] = useState("");
   const [isDefaultImage, setIsDefaultImage] = useState(true);
-  const [uriImage, setUriImage] = useState("");
+  const [uriLocalImage, setUriLocalImage] = useState("");
+  const [localImageName, setLocalImageName] = useState("");
+
   const userId = firebase.auth().currentUser.uid;
 
   useEffect(() => {
@@ -35,7 +37,7 @@ export default function MyProfil(props) {
         setPseudo(data.pseudo || "");
         setTelephone(data.telephone || "");
         if (data.profileImage) {
-          setUriImage(data.profileImage);
+          setUriLocalImage(data.profileImage);
           setIsDefaultImage(false);
         }
       }
@@ -44,7 +46,7 @@ export default function MyProfil(props) {
     return () => userProfileRef.off();
   }, []);
 
-  const handleImagePick = async () => {
+  const pickImage = async () => {
     try {
       const permissionResult =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -58,17 +60,16 @@ export default function MyProfil(props) {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images", "videos"],
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
-        base64: true,
       });
 
       if (!result.canceled) {
         const uri = result.assets[0].uri;
         if (!uri) throw new Error("Failed to get image URI.");
-        setUriImage(uri);
+        setUriLocalImage(uri);
         setIsDefaultImage(false);
         console.log("uri:", uri);
 
@@ -80,40 +81,56 @@ export default function MyProfil(props) {
     }
   };
 
-  const uploadImageToSupabase = async (uri) => {
+  const uploadImageToSupabase = async (urilocal) => {
     try {
-      const fileExt = uri.split(".").pop();
-      const fileName = `${userId}-${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
-      console.log(filePath);
-
-      const response = await fetch(uri);
+      const response = await fetch(urilocal);
       const blob = await response.blob();
+      const arraybuffer = await new Response(blob).arrayBuffer();
 
-      const { data, error } = await supabase.storage
-        .from("profileImages")
-        .upload(filePath, uri, { contentType: `image/${fileExt}` });
-
-      if (error) {
-        console.error("Upload error:", error);
-        throw error;
+      if (!userId) {
+        console.error("userId est invalide:", userId);
+        return null;
       }
 
-      const { data: publicUrlData } = supabase.storage
+      const uniqueImageId = new Date().getTime().toString();
+      const { error: uploadError } = await supabase.storage
         .from("profileImages")
-        .getPublicUrl(filePath);
+        .upload(`Profil${uniqueImageId}`, arraybuffer, { upsert: true });
 
-      const publicUrl = publicUrlData.publicUrl;
-      console.log("Public URL:", publicUrl);
+      if (uploadError) {
+        console.error(
+          "Erreur lors de l'upload de l'image:",
+          uploadError.message
+        );
+        return null;
+      }
 
+      const { data, error: getError } = await supabase.storage
+        .from("profileImages")
+        .getPublicUrl(`Profil${uniqueImageId}`);
+
+      if (getError) {
+        console.error(
+          "Erreur lors de l'obtention de l'URL de l'image:",
+          getError.message
+        );
+        return null;
+      }
+
+      if (!data || !data.publicUrl) {
+        console.error("L'URL publique n'est pas disponible:", data);
+        return null;
+      }
+
+      console.log("URL publique de l'image:", data.publicUrl);
       await ref_tableProfils.child(`Profil${userId}`).update({
-        profileImage: publicUrl,
+        profileImage: data.publicUrl,
       });
 
       Alert.alert("Success", "Profile picture updated!");
     } catch (error) {
-      console.error("Error uploading image:", error);
-      Alert.alert("Error", "Failed to upload image.");
+      console.error("Erreur lors du téléchargement de l'image:", error);
+      return null;
     }
   };
 
@@ -134,7 +151,6 @@ export default function MyProfil(props) {
       .then(() => Alert.alert("Success", "Profile updated successfully!"))
       .catch((error) => Alert.alert("Error", error.message));
   };
-
   return (
     <ImageBackground
       source={require("../../assets/imgbleu.jpg")}
@@ -149,13 +165,13 @@ export default function MyProfil(props) {
             source={
               isDefaultImage
                 ? require("../../assets/profil.png")
-                : { uri: uriImage }
+                : { uri: uriLocalImage }
             }
             style={styles.profileImage}
           />
         </TouchableHighlight>
 
-        <TouchableOpacity style={styles.cameraIcon} onPress={handleImagePick}>
+        <TouchableOpacity style={styles.cameraIcon} onPress={pickImage}>
           <Image
             source={require("../../assets/camera-icon.png")}
             style={{ width: 30, height: 30 }}

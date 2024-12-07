@@ -34,7 +34,9 @@ export default function Chat(props) {
           fetchedMessages.push(child.val());
         }
       });
-      setMessages(fetchedMessages.reverse());
+
+      const processedMessages = addDateSeparators(fetchedMessages.reverse());
+      setMessages(processedMessages);
     });
 
     ref_unediscussion.child("typing").on("value", (snapshot) => {
@@ -47,6 +49,22 @@ export default function Chat(props) {
 
     return () => ref_unediscussion.off();
   }, []);
+
+  const addDateSeparators = (messages) => {
+    const result = [];
+    let lastDate = null;
+
+    messages.forEach((message) => {
+      const currentDate = new Date(message.date).toDateString();
+      if (currentDate !== lastDate) {
+        result.push({ type: "date", date: currentDate });
+        lastDate = currentDate;
+      }
+      result.push(message);
+    });
+
+    return result;
+  };
 
   const handleInputChange = (text) => {
     setInputText(text);
@@ -78,8 +96,12 @@ export default function Chat(props) {
   };
 
   const renderMessage = ({ item }) => {
+    if (item.type === "date") {
+      return <Text style={styles.dateHeader}>{item.date}</Text>;
+    }
+
     const isMe = item.sender === userId;
-    const formattedDate = new Date(item.date).toLocaleTimeString();
+    const formattedTime = new Date(item.date).toLocaleTimeString();
 
     return (
       <TouchableOpacity
@@ -89,7 +111,7 @@ export default function Chat(props) {
         ]}
       >
         <Text style={styles.messageText}>{item.text}</Text>
-        <Text style={styles.timestamp}>{formattedDate}</Text>
+        <Text style={styles.timestamp}>{formattedTime}</Text>
       </TouchableOpacity>
     );
   };
@@ -117,7 +139,9 @@ export default function Chat(props) {
         <FlatList
           data={messages}
           renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) =>
+            item.type === "date" ? `date-${index}` : item.id
+          }
           contentContainerStyle={styles.messagesList}
           inverted
         />
@@ -167,6 +191,13 @@ const styles = StyleSheet.create({
   messagesList: {
     paddingHorizontal: 10,
     paddingVertical: 20,
+  },
+  dateHeader: {
+    alignSelf: "center",
+    marginVertical: 10,
+    fontSize: 14,
+    color: "gray",
+    fontWeight: "bold",
   },
   messageContainer: {
     maxWidth: "75%",
