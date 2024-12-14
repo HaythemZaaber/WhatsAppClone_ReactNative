@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Linking,
+  TextInput,
 } from "react-native";
 import firebase from "../../Config";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -23,6 +24,8 @@ export default function ListProfils(props) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const userId = firebase.auth().currentUser?.uid;
+  const [search, setSearch] = useState("");
+  const [filteredData, setFilteredData] = useState([]);
 
   useEffect(() => {
     const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
@@ -86,6 +89,15 @@ export default function ListProfils(props) {
     };
   }, [userId, props.navigation]);
 
+  useEffect(() => {
+    const filtered = data.filter(
+      (profile) =>
+        profile.nom.toLowerCase().includes(search.toLowerCase()) ||
+        profile.pseudo.toLowerCase().includes(search.toLowerCase())
+    );
+    setFilteredData(filtered);
+  }, [search, data]);
+
   const handleCall = (phoneNumber) => {
     if (!phoneNumber) {
       alert("Invalid phone number.");
@@ -112,20 +124,20 @@ export default function ListProfils(props) {
     >
       <View style={styles.contactInner}>
         <View style={styles.statusContainer}>
-          <View
-            style={[
-              styles.statusIndicator,
-              { backgroundColor: item.status === "online" ? "green" : "gray" },
-            ]}
-          />
           <Image
             source={
               item.profileImage
-                ? { uri: item.profileImage }
-                : require("../../assets/profil.png")
+              ? { uri: item.profileImage }
+              : require("../../assets/profil.png")
             }
             style={styles.profileImage}
           />
+            <View
+              style={[
+                styles.onlineDot,
+                { backgroundColor: item.status === "online" ? "green" : "gray" },
+              ]}
+            />
         </View>
         <View style={styles.textContainer}>
           <Text style={styles.contactName}>
@@ -174,8 +186,20 @@ export default function ListProfils(props) {
     >
       <StatusBar style="light" />
       <Text style={styles.textstyle}>List Profils</Text>
+
+      <View style={styles.textinputstyle}>
+        <TextInput
+          placeholder="Search profiles"
+          placeholderTextColor="#bbb"
+          style={{ flex: 1, color: "#FFF" }}
+          value={search}
+          onChangeText={(text) => setSearch(text)}
+        />
+        <Icon name="search" size={25} color="white" />
+      </View>
+
       <FlatList
-        data={data}
+        data={filteredData}
         keyExtractor={(item, index) => item.id || index.toString()}
         renderItem={renderItem}
         style={styles.listContainer}
@@ -185,6 +209,20 @@ export default function ListProfils(props) {
 }
 
 const styles = StyleSheet.create({
+  textinputstyle: {
+    display: "flex",
+    flexDirection: "row",
+    backgroundColor: "#0004",
+    alignItems: "center",
+    justifyContent: "space-between",
+    fontSize: 20,
+    color: "#FFF",
+    width: "95%",
+    height: 50,
+    borderRadius: 10,
+    margin: 5,
+    paddingHorizontal: 15,
+  },
   container: {
     flex: 1,
     alignItems: "center",
@@ -271,5 +309,16 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 18,
     color: "#888",
+  },
+  onlineDot: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 13,
+    height: 13,
+    borderRadius: 6,
+    backgroundColor: "#4CAF50",
+    borderWidth: 2,
+    borderColor: "#fff", 
   },
 });

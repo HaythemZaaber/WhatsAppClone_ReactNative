@@ -10,11 +10,13 @@ import {
   TouchableOpacity,
   Alert,
   View,
+  Modal,
 } from "react-native";
 import firebase from "../../Config";
 import { supabase } from "../../Config/initSupabase";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Ionicons from "react-native-vector-icons/MaterialIcons";
 
 const database = firebase.database();
 const ref_tableProfils = database.ref("ProfilsTable");
@@ -26,6 +28,7 @@ export default function MyProfil(props) {
   const [isDefaultImage, setIsDefaultImage] = useState(true);
   const [uriLocalImage, setUriLocalImage] = useState("");
   const [localImageName, setLocalImageName] = useState("");
+  const [isModalVisible, setModalVisible] = useState(false);
 
   const userId = firebase.auth().currentUser.uid;
 
@@ -47,71 +50,44 @@ export default function MyProfil(props) {
     return () => userProfileRef.off();
   }, []);
 
-  const pickImage = async () => {
+  const handleImagePick = async (fromCamera) => {
     try {
-      const permissionResult =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permissionResult = fromCamera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permissionResult.granted) {
         Alert.alert(
           "Permission Denied",
-          "You need to allow access to your media library to select an image."
+          `You need to allow access to your ${
+            fromCamera ? "camera" : "media library"
+          }.`
         );
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 1,
-      });
-
+      const result = fromCamera
+        ? await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 1,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 1,
+          });
+      setModalVisible(false);
       if (!result.canceled) {
         const uri = result.assets[0].uri;
-        if (!uri) throw new Error("Failed to get image URI.");
-        setUriLocalImage(uri);
+        if (!uri) throw new Error("Failed to get image base64 data.");
+        setUriLocalImage(result.assets[0].uri);
         setIsDefaultImage(false);
-        console.log("Picked image URI:", uri);
-
         await uploadImageToSupabase(uri);
       }
     } catch (error) {
-      console.error("Error picking image:", error);
-      Alert.alert("Error", "Failed to pick image.");
-    }
-  };
-
-  const takePhoto = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-
-      if (!permissionResult.granted) {
-        Alert.alert(
-          "Permission Denied",
-          "You need to allow access to your camera to take a photo."
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 1,
-      });
-
-      if (!result.canceled) {
-        const uri = result.assets[0].uri;
-        if (!uri) throw new Error("Failed to get image URI.");
-        setUriLocalImage(uri);
-        setIsDefaultImage(false);
-        console.log("Captured image URI:", uri);
-
-        await uploadImageToSupabase(uri);
-      }
-    } catch (error) {
-      console.error("Error capturing photo:", error);
-      Alert.alert("Error", "Failed to capture photo.");
+      console.log(error);
     }
   };
 
@@ -132,10 +108,7 @@ export default function MyProfil(props) {
         .upload(`Profil${uniqueImageId}`, arraybuffer, { upsert: true });
 
       if (uploadError) {
-        console.error(
-          "Error uploading image:",
-          uploadError.message
-        );
+        console.error("Error uploading image:", uploadError.message);
         return null;
       }
 
@@ -144,10 +117,7 @@ export default function MyProfil(props) {
         .getPublicUrl(`Profil${uniqueImageId}`);
 
       if (getError) {
-        console.error(
-          "Error getting image public URL:",
-          getError.message
-        );
+        console.error("Error getting image public URL:", getError.message);
         return null;
       }
 
@@ -195,31 +165,52 @@ export default function MyProfil(props) {
       <Text style={styles.textstyle}>My Account</Text>
 
       <View style={styles.imageContainer}>
-        <TouchableHighlight>
+        <Image
+          source={
+            isDefaultImage
+              ? require("../../assets/profil.png")
+              : { uri: uriLocalImage }
+          }
+          style={styles.profileImage}
+        />
+        <TouchableOpacity
+          style={styles.cameraIcon}
+          onPress={() => setModalVisible(true)}
+        >
+          {/* <Ionicons name="camera" size={20} color="#fff" /> */}
           <Image
-            source={
-              isDefaultImage
-                ? require("../../assets/profil.png")
-                : { uri: uriLocalImage }
-            }
-            style={styles.profileImage}
-          />
-        </TouchableHighlight>
-
-        <TouchableOpacity style={styles.cameraIcon} onPress={pickImage}>
-          <Image
+            style={{ width: 28, height: 28 }}
             source={require("../../assets/camera-icon.png")}
-            style={{ width: 30, height: 30 }}
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.takePhotoIcon} onPress={takePhoto}>
-          <Image
-            source={require("../../assets/camera-icon.png")}
-            style={{ width: 30, height: 30 }}
           />
         </TouchableOpacity>
       </View>
+
+      <Modal transparent={true} visible={isModalVisible} animationType="fade">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          onPress={() => setModalVisible(false)}
+        >
+          <View style={styles.modalContent}>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => handleImagePick(true)}
+            >
+              <Image
+                style={{ width: 40, height: 40 }}
+                source={require("../../assets/camera-icon.png")}
+              />
+              <Text style={styles.modalButtonText}>Open Camera</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => handleImagePick(false)}
+            >
+              <Ionicons name="image" size={40} color="#000" />
+              <Text style={styles.modalButtonText}>Select from Gallery</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <TextInput
         value={nom}
@@ -255,7 +246,9 @@ export default function MyProfil(props) {
         underlayColor="#DDDDDD"
         style={styles.saveButton}
       >
-        <Text style={{ color: "#FFF", fontSize: 24 }}>Save</Text>
+        <Text style={{ color: "#FFF", fontSize: 20, fontWeight: "bold" }}>
+          Save
+        </Text>
       </TouchableHighlight>
       <TouchableHighlight
         onPress={async () => {
@@ -272,7 +265,9 @@ export default function MyProfil(props) {
         underlayColor="#DDDDDD"
         style={styles.deconnectionButton}
       >
-        <Text style={{ color: "#FFF", fontSize: 24 }}>Sign Out</Text>
+        <Text style={{ color: "#FFF", fontSize: 20, fontWeight: "bold" }}>
+          Sign Out
+        </Text>
       </TouchableHighlight>
     </ImageBackground>
   );
@@ -281,19 +276,31 @@ export default function MyProfil(props) {
 const styles = StyleSheet.create({
   imageContainer: {
     position: "relative",
-  },
-  profileImage: {
-    height: 200,
-    width: 200,
-    borderRadius: 100,
+    marginBottom: 20,
   },
   cameraIcon: {
     position: "absolute",
-    bottom: 10,
-    right: 10,
+    bottom: 20,
+    right: 20,
     backgroundColor: "#FFF",
     borderRadius: 15,
-    padding: 5,
+    padding: 2,
+  },
+  profileImage: {
+    height: 180,
+    width: 180,
+    borderRadius: 100,
+    marginVertical: 20,
+    borderWidth: 2,
+    borderColor: "#ddd",
+  },
+  galleryIcon: {
+    position: "absolute",
+    bottom: 10,
+    right: 13,
+    backgroundColor: "#FFF",
+    borderRadius: 15,
+    padding: 2,
   },
   takePhotoIcon: {
     position: "absolute",
@@ -301,23 +308,33 @@ const styles = StyleSheet.create({
     left: 10,
     backgroundColor: "#FFF",
     borderRadius: 15,
-    padding: 5,
+    padding: 3,
   },
   textinputstyle: {
     fontWeight: "bold",
-    backgroundColor: "#0004",
+    backgroundColor: "#0005",
+    borderWidth: 2,
+    borderColor: "#0008",
     fontSize: 20,
     color: "#fff",
     width: "75%",
     height: 50,
     borderRadius: 10,
     margin: 5,
+    selectionColor: "white",
+    marginBottom: 10,
+    shadowColor: "#000",
+    // elevation:20,
+    // shadowOffset: { width: 0, height:1  },
+    // shadowOpacity: 0.2,
+    // shadowRadius: 2,
   },
   textstyle: {
-    fontSize: 40,
+    fontSize: 30,
     fontFamily: "serif",
     color: "white",
     fontWeight: "bold",
+    selectionColor: "white",
   },
   container: {
     flex: 1,
@@ -329,24 +346,61 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderColor: "#00f",
     borderWidth: 2,
-    backgroundColor: "#08f6",
-    height: 60,
+    backgroundColor: "#0b75F9",
+    height: 50,
     width: "50%",
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 5,
+    borderRadius: 10,
     marginTop: 20,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   deconnectionButton: {
     marginBottom: 10,
     borderColor: "#f00",
     borderWidth: 2,
-    backgroundColor: "#f86",
-    height: 60,
+    backgroundColor: "#f44",
+    height: 50,
     width: "50%",
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 5,
+    borderRadius: 10,
     marginTop: 20,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    flexDirection: "row",
+    width: 350,
+    padding: 20,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 30,
+  },
+  modalButton: {
+    flexDirection: "col",
+    alignItems: "center",
+    marginVertical: 10,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    marginRight: 8,
+    color: "#333",
+    fontWeight: 500,
   },
 });

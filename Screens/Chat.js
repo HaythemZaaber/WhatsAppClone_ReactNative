@@ -10,8 +10,10 @@ import {
   Platform,
   Image,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import firebase from "../Config";
+import * as DocumentPicker from "expo-document-picker"; // For file selection
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const reflesdiscussions = firebase.database().ref("TheDiscussions");
@@ -20,6 +22,8 @@ export default function Chat(props) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [uploading, setUploading] = useState(false); // Track upload status
+
   const profile = props.route.params.profile;
   const userId = firebase.auth().currentUser.uid;
   const iddisc =
@@ -71,11 +75,13 @@ export default function Chat(props) {
     ref_unediscussion.child("typing").set(text ? userId : null);
   };
 
-  const sendMessage = () => {
-    if (inputText.trim() === "") return;
+  const sendMessage = (fileUrl = null) => {
+    if (!inputText.trim() && !fileUrl) return;
+
     const newMessage = {
       id: Date.now().toString(),
-      text: inputText,
+      text: fileUrl ? "📎 File" : inputText,
+      fileUrl, // Add file URL to the message if present
       sender: userId,
       date: new Date().toISOString(),
       receiver: profile.id,
@@ -88,11 +94,53 @@ export default function Chat(props) {
       .then(() => {
         ref_unediscussion.child("typing").set(null);
         setInputText("");
+        if (fileUrl) {
+          Alert.alert("Success", "File uploaded and sent successfully!");
+        }
       })
       .catch((error) => {
         console.error("Error sending message:", error);
         Alert.alert("Error", "Failed to send the message.");
       });
+  };
+
+  const pickAndUploadFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "*/*", // Allow all file types
+      });
+
+      if (result.type === "success") {
+        setUploading(true);
+        Alert.alert("Info", "Uploading file...");
+
+        const fileUri = result.uri;
+        const fileName = result.name;
+        const storageRef = firebase.storage().ref(`chat_files/${fileName}`);
+        const response = await fetch(fileUri);
+        const blob = await response.blob();
+
+        // Upload file to Firebase Storage
+        const uploadTask = storageRef.put(blob);
+        uploadTask.on(
+          "state_changed",
+          null,
+          (error) => {
+            setUploading(false);
+            console.error("Upload error:", error);
+            Alert.alert("Error", "Failed to upload file.");
+          },
+          async () => {
+            const fileUrl = await storageRef.getDownloadURL();
+            setUploading(false);
+            sendMessage(fileUrl); // Send file URL as a message
+          }
+        );
+      }
+    } catch (error) {
+      console.error("File selection error:", error);
+      Alert.alert("Error", "Failed to select a file.");
+    }
   };
 
   const renderMessage = ({ item }) => {
@@ -110,7 +158,17 @@ export default function Chat(props) {
           isMe ? styles.myMessage : styles.otherMessage,
         ]}
       >
-        <Text style={styles.messageText}>{item.text}</Text>
+        {item.fileUrl ? (
+          item.fileUrl.match(/\.(jpeg|jpg|png|gif)$/i) ? (
+            <Image source={{ uri: item.fileUrl }} style={styles.imagePreview} />
+          ) : (
+            <Text style={[styles.messageText, styles.fileText]}>
+              📎 File: {item.text}
+            </Text>
+          )
+        ) : (
+          <Text style={styles.messageText}>{item.text}</Text>
+        )}
         <Text style={styles.timestamp}>{formattedTime}</Text>
       </TouchableOpacity>
     );
@@ -154,10 +212,20 @@ export default function Chat(props) {
             value={inputText}
             onChangeText={handleInputChange}
           />
-          <TouchableOpacity style={styles.sendButton} onPress={sendMessage}>
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={inputText ? sendMessage : null}
+          >
             <Text style={styles.sendButtonText}>Send</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={pickAndUploadFile}
+          >
+            <Text style={styles.sendButtonText}>📎</Text>
+          </TouchableOpacity>
         </View>
+        {uploading && <ActivityIndicator size="small" color="#0F52BA" />}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -217,44 +285,55 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
   },
+  fileText: {
+    color: "#fff",
+    fontStyle: "italic",
+  },
   timestamp: {
     fontSize: 10,
     color: "#ccc",
     alignSelf: "flex-end",
     marginTop: 5,
   },
-  typingIndicator: {
-    textAlign: "center",
-    fontStyle: "italic",
-    marginBottom: 10,
-    color: "gray",
+  textInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 20,
+    padding: 10,
+    marginRight: 10,
+    backgroundColor: "#fff",
+  },
+  sendButton: {
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#0F52BA",
+    borderRadius: 20,
+    padding: 10,
+  },
+  sendButtonText: {
+    color: "#fff",
+    fontSize: 16,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
     padding: 10,
     borderTopWidth: 1,
-    borderTopColor: "#ddd",
+    borderTopColor: "#ccc",
     backgroundColor: "#fff",
   },
-  textInput: {
-    flex: 1,
-    height: 40,
-    borderColor: "#ddd",
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    backgroundColor: "#f9f9f9",
+  imagePreview: {
+    width: 200,
+    height: 200,
+    borderRadius: 10,
+    marginBottom: 5,
+    resizeMode: "cover",
   },
-  sendButton: {
-    marginLeft: 10,
-    backgroundColor: "#0F52BA",
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-  },
-  sendButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
+  typingIndicator: {
+    alignSelf: "center",
+    fontSize: 14,
+    color: "gray",
+    marginVertical: 5,
   },
 });

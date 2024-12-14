@@ -11,6 +11,7 @@ import {
 import { StatusBar } from "expo-status-bar";
 import firebase from "../Config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Ionicons from "react-native-vector-icons/MaterialIcons";
 
 const auth = firebase.auth();
 
@@ -90,29 +91,32 @@ export default function Auth({ navigation }) {
       <StatusBar style="auto" />
       <View style={styles.card}>
         <Text style={styles.welcomeText}>Bienvenue</Text>
-
-        <TextInput
-          keyboardType="email-address"
-          placeholder="Email"
-          placeholderTextColor="black"
-          value={email}
-          onChangeText={setEmail}
-          style={styles.textInput}
-          accessible
-          accessibilityLabel="Email Input"
-        />
-
-        <TextInput
-          placeholder="Password"
-          placeholderTextColor="black"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-          style={styles.textInput}
-          accessible
-          accessibilityLabel="Password Input"
-        />
-
+        <View style={styles.inputContainer}>
+          <Ionicons name="mail-outline" size={20} color="#6C63FF" />
+          <TextInput
+            keyboardType="email-address"
+            placeholder="Email"
+            placeholderTextColor="black"
+            value={email}
+            onChangeText={setEmail}
+            style={styles.textInput}
+            accessible
+            accessibilityLabel="Email Input"
+          />
+        </View>
+        <View style={styles.inputContainer}>
+          <Ionicons name="lock-outline" size={20} color="#6C63FF" />
+          <TextInput
+            placeholder="Password"
+            placeholderTextColor="black"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            style={styles.textInput}
+            accessible
+            accessibilityLabel="Password Input"
+          />
+        </View>
         <View style={styles.checkboxContainer}>
           <TouchableOpacity onPress={toggleRememberMe} style={styles.checkbox}>
             <View
@@ -167,9 +171,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    marginVertical: 10,
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
   card: {
     backgroundColor: "#0007",
-    height: 400,
+    height: 430,
     width: "90%",
     alignItems: "center",
     justifyContent: "center",
@@ -187,11 +202,11 @@ const styles = StyleSheet.create({
   textInput: {
     height: 50,
     width: "100%",
-    backgroundColor: "#fff",
+
     borderRadius: 10,
     paddingHorizontal: 15,
     fontSize: 16,
-    marginBottom: 15,
+
     color: "black",
   },
   checkboxContainer: {

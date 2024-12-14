@@ -1,67 +1,110 @@
-import React, { useEffect } from "react";
-import { StyleSheet, useColorScheme } from "react-native";
+import React, { useEffect, useState } from "react";
+import { StyleSheet, View, Text } from "react-native";
 import { createMaterialBottomTabNavigator } from "@react-navigation/material-bottom-tabs";
 import ListProfils from "./Home/ListProfils";
 import Groupes from "./Home/Groupes";
 import MyProfil from "./Home/MyProfil";
 import Icon from "react-native-vector-icons/MaterialIcons";
+import { useNavigation } from "@react-navigation/native";
 import firebase from "../Config";
+import { LogBox } from "react-native";
+
+// Suppress specific warning logs
+LogBox.ignoreLogs([
+  'A props object containing a "key" prop is being spread into JSX',
+]);
 
 const Tab = createMaterialBottomTabNavigator();
+const ref_tableProfils = firebase.database().ref("ProfilsTable");
 
-export default function Home(props) {
-  const theme = useColorScheme();
-  const tabBarBackgroundColor = theme === "dark" ? "#333" : "#f8f8f8";
+// Tab Icon Component
+const TabIcon = ({ name, focused, color }) => (
+  <Icon name={name} size={focused ? 30 : 24} color={color} />
+);
 
-  useEffect(() => {
-    const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
-      if (!user) {
-        props.navigation.replace("Auth");
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color }) => {
-          let iconName;
-          let iconSize = focused ? 30 : 24;
-          if (route.name === "ListProfils") iconName = "list";
-          if (route.name === "Groupes") iconName = "group";
-          if (route.name === "MyProfile") iconName = "person";
-          return <Icon name={iconName} size={iconSize} color={color} />;
-        },
-        tabBarActiveTintColor: "#007aff",
-        tabBarInactiveTintColor: "gray",
-        tabBarStyle: { backgroundColor: tabBarBackgroundColor },
-      })}
-    >
+// Tab Navigator Component
+const AppTabNavigator = ({ profileExist }) => (
+  <Tab.Navigator
+    initialRouteName={profileExist ? "ListProfils" : "MyProfile"}
+    activeColor="#000"
+    inactiveColor="#fff"
+    barStyle={{ backgroundColor: "#0b75a7" }}
+  >
+    {profileExist && (
       <Tab.Screen
         name="ListProfils"
         component={ListProfils}
-        options={{ accessibilityLabel: "Profiles tab" }}
+        options={{
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name="list" focused={focused} color={color} />
+          ),
+        }}
       />
+    )}
+
+    {profileExist && (
       <Tab.Screen
         name="Groupes"
         component={Groupes}
-        options={{ accessibilityLabel: "Groups tab" }}
+        options={{
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name="group" focused={focused} color={color} />
+          ),
+        }}
       />
-      <Tab.Screen
-        name="MyProfile"
-        component={MyProfil}
-        options={{ accessibilityLabel: "My Profile tab" }}
-      />
-    </Tab.Navigator>
-  );
+    )}
+
+    <Tab.Screen
+      name="MyProfile"
+      component={MyProfil}
+      options={{
+        tabBarIcon: ({ focused, color }) => (
+          <TabIcon name="person" focused={focused} color={color} />
+        ),
+      }}
+    />
+  </Tab.Navigator>
+);
+
+export default function Home() {
+  const [profileExist, setProfileExist] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const navigation = useNavigation();
+  const auth = firebase.auth().currentUser?.uid;
+
+  useEffect(() => {
+    if (!auth) {
+      navigation.replace("Auth");
+      return;
+    }
+
+    const userProfileRef = ref_tableProfils.child(`Profil${auth}`);
+
+    const handleProfileCheck = (snapshot) => {
+      setProfileExist(snapshot.val());
+      setLoading(false);
+    };
+
+    userProfileRef.on("value", handleProfileCheck);
+    return () => userProfileRef.off("value", handleProfileCheck);
+  }, [auth, navigation]);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
+
+  return <AppTabNavigator profileExist={profileExist} />;
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#fff",
   },
 });
