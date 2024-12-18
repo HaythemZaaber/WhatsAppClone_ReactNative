@@ -12,7 +12,6 @@ import { StatusBar } from "expo-status-bar";
 import firebase from "../Config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "react-native-vector-icons/MaterialIcons";
-
 const auth = firebase.auth();
 
 export default function Auth({ navigation }) {
@@ -30,7 +29,7 @@ export default function Auth({ navigation }) {
           setLoading(true);
           auth
             .signInWithEmailAndPassword(savedEmail, savedPassword)
-            .then(() => {
+            .then(async () => {
               setLoading(false);
               navigation.replace("Home");
             })

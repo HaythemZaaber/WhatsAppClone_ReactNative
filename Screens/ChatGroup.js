@@ -14,11 +14,10 @@ import {
   Linking,
   ImageBackground,
 } from "react-native";
-import OpenAnything from "react-native-openanything";
+import FlashMessage from "react-native-flash-message";
 import { StatusBar } from "expo-status-bar";
 import firebase from "../Config"; // Update this to your Firebase config file
 import { SafeAreaView } from "react-native-safe-area-context";
-import ChatHeader from "../Components/ChatHeader";
 import { supabase } from "../Config/initSupabase"; // Import Supabase client
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
@@ -28,8 +27,10 @@ import moment from "moment";
 import { decode } from "base64-arraybuffer";
 import * as Location from "expo-location";
 import Ionicons from "react-native-vector-icons/MaterialIcons";
-const reflesdiscussions = firebase.database().ref("TheDiscussions");
 import { LogBox } from "react-native";
+import ChatGroupHeader from "../Components/ChatGroupHeader";
+const reflesdiscussions = firebase.database().ref("TheDiscussions");
+const reflesprofils = firebase.database().ref("ProfilsTable");
 
 // Suppress specific warning logs
 LogBox.ignoreLogs(["Text strings must be rendered within a <Text> component"]);
@@ -37,19 +38,18 @@ LogBox.ignoreLogs(["Text strings must be rendered within a <Text> component"]);
 export default function Chat(props) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
-  const profile = props.route.params.profile;
   const userId = firebase.auth().currentUser.uid;
-  const iddisc =
-    userId > profile.id ? userId + profile.id : profile.id + userId;
-  const ref_unediscussion = reflesdiscussions.child(iddisc);
   const [isTyping, setIsTyping] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
   const [isModalVisible, setModalVisible] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState(null);
   const [reactionModalVisible, setReactionModalVisible] = useState(false);
+  const [profiles, setProfiles] = useState([]);
+  const group = props.route.params.group;
+  const ref_groupChat = reflesdiscussions.child(group.id);
 
   useEffect(() => {
-    ref_unediscussion.on("value", (snapshot) => {
+    ref_groupChat.on("value", (snapshot) => {
       const fetchedMessages = [];
       snapshot.forEach((child) => {
         if (child.key !== "typing") {
@@ -58,8 +58,19 @@ export default function Chat(props) {
       });
       setMessages(processMessagesWithDateSeparators(fetchedMessages.reverse()));
     });
+    reflesprofils.on("value", (snapshot) => {
+      const fetchedProfiles = [];
+      snapshot.forEach((child) => {
+        fetchedProfiles.push({ id: child.key, ...child.val() });
+      });
+      setProfiles(fetchedProfiles);
+      console.log(fetchedProfiles);
+    });
 
-    return () => ref_unediscussion.off();
+    return () => {
+      ref_groupChat.off();
+      reflesprofils.off();
+    };
   }, []);
 
   const processMessagesWithDateSeparators = (messages) => {
@@ -89,8 +100,9 @@ export default function Chat(props) {
     if (!messages.length) return;
 
     const lastMessage = messages[1];
-    if (lastMessage.receiver === userId && !lastMessage.seen.status) {
-      const messageRef = ref_unediscussion.child(lastMessage.id);
+    const ids = profiles.map((profile) => profile.id);
+    if (ids.includes(userId) && lastMessage.sender!== userId && !lastMessage.seen?.status) {
+      const messageRef = ref_groupChat.child(lastMessage.id);
       messageRef.update({
         seen: {
           status: true,
@@ -101,9 +113,15 @@ export default function Chat(props) {
   }, [messages]);
 
   useEffect(() => {
-    const typingRef = ref_unediscussion.child("typing").child(profile.id);
+    const typingRef = ref_groupChat.child("typing");
     typingRef.on("value", (snapshot) => {
-      setOtherTyping(snapshot.val());
+      const typingUsers = [];
+      snapshot.forEach((child) => {
+        if (child.key !== userId && child.val()) {
+          typingUsers.push(child.key);
+        }
+      });
+      setOtherTyping(typingUsers);
     });
 
     return () => typingRef.off();
@@ -112,7 +130,7 @@ export default function Chat(props) {
   // Update typing status in Firebase
   const handleInputChange = (text) => {
     setInputText(text);
-    const typingRef = ref_unediscussion.child("typing").child(userId);
+    const typingRef = ref_groupChat.child("typing").child(userId);
     if (text.length > 0 && !isTyping) {
       setIsTyping(true);
       typingRef.set(true);
@@ -123,7 +141,7 @@ export default function Chat(props) {
   };
 
   const addReaction = (messageId, reaction) => {
-    const messageRef = ref_unediscussion.child(messageId);
+    const messageRef = ref_groupChat.child(messageId);
 
     messageRef.child("reactions").update({
       [userId]: reaction, // Add or update the reaction for the current user
@@ -145,14 +163,17 @@ export default function Chat(props) {
   // Send a new message to Firebase
   const sendMessage = () => {
     if (inputText.trim() === "") return;
-    const key = ref_unediscussion.push().key;
-    const ref_unediscussion_key = ref_unediscussion.child(key);
+    const key = ref_groupChat.push().key;
+    const ref_groupChat_key = ref_groupChat.child(key);
+    console.log(userId);
+    const senderName = profiles.find((profile) => profile.id === userId)?.nom;
+    console.log("Sender Profile:", senderName); // Debugging: Log the profile object
     const newMessage = {
       id: key,
       text: inputText,
-      sender: userId, // You can change this logic based on authentication
+      sender: userId,
+      senderName: senderName,
       date: new Date().toISOString(),
-      receiver: profile.id,
       type: "text",
       seen: {
         status: false,
@@ -161,9 +182,9 @@ export default function Chat(props) {
       reactions: {},
     };
 
-    ref_unediscussion_key.set(newMessage);
+    ref_groupChat_key.set(newMessage);
     setInputText("");
-    const typingRef = ref_unediscussion.child("typing").child(userId);
+    const typingRef = ref_groupChat.child("typing").child(userId);
     typingRef.set(false);
     setIsTyping(false);
   };
@@ -224,7 +245,7 @@ export default function Chat(props) {
               onPress={() => Linking.openURL(item.text)} // Open the Google Maps link
               style={styles.locationMessage}
             >
-              <Text style={styles.locationText}> My Location</Text>
+              <Text style={styles.locationText}>📍 My Location</Text>
               <Text style={styles.messageTime}>
                 {moment(item.date).format("HH:mm")}
               </Text>
@@ -281,6 +302,9 @@ export default function Chat(props) {
               </View>
             )}
           </View>
+        )}
+        {item.sender !== userId && (
+          <Text style={styles.senderName}>{item?.senderName || "User"}</Text>
         )}
       </TouchableOpacity>
     );
@@ -350,8 +374,8 @@ export default function Chat(props) {
 
   const uploadFileToSupabase = async (fileUri, fileName, fileType) => {
     try {
-      const key = ref_unediscussion.push().key; // Generate unique key
-      const ref_unediscussion_key = ref_unediscussion.child(key);
+      const key = ref_groupChat.push().key; // Generate unique key
+      const ref_groupChat_key = ref_groupChat.child(key);
 
       if (fileType == "image") {
         fileName = `${key}.jpg`;
@@ -386,12 +410,11 @@ export default function Chat(props) {
         fileName: fileName,
         sender: userId,
         date: new Date().toISOString(),
-        receiver: profile.id,
         type: fileType, // Store type as "image" or "file"
         reactions: [],
       };
 
-      ref_unediscussion_key.set(newMessage);
+      ref_groupChat_key.set(newMessage);
 
       Alert.alert(
         "Success",
@@ -422,20 +445,19 @@ export default function Chat(props) {
       const { latitude, longitude } = location.coords;
 
       // Construct a location message
-      const key = ref_unediscussion.push().key;
-      const ref_unediscussion_key = ref_unediscussion.child(key);
+      const key = ref_groupChat.push().key;
+      const ref_groupChat_key = ref_groupChat.child(key);
 
       const newMessage = {
         id: key,
         text: `https://www.google.com/maps?q=${latitude},${longitude}`, // Link to Google Maps
         sender: userId,
         date: new Date().toISOString(),
-        receiver: profile.id,
         type: "location",
       };
 
       // Send message to Firebase
-      ref_unediscussion_key.set(newMessage);
+      ref_groupChat_key.set(newMessage);
     } catch (error) {
       console.error(error);
       Alert.alert("Error", "Failed to share location.");
@@ -444,8 +466,9 @@ export default function Chat(props) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <FlashMessage position="top" />
       <StatusBar style="auto" />
-      <ChatHeader profile={profile} idDisc={iddisc} />
+      <ChatGroupHeader group={group} />
       <ImageBackground
         source={require("../assets/chatt.jpg")}
         style={{ flex: 1, backgroundColor: "#FEC" }}
@@ -458,7 +481,14 @@ export default function Chat(props) {
             contentContainerStyle={styles.messagesList}
             inverted
           />
-
+          {/* "Seen" status for the last message */}
+          {messages.length > 0 &&
+            messages[0].sender === userId &&
+            messages[0].seen?.status && (
+              <Text style={styles.seenStatus}>
+                Seen at {new Date(messages[0].seen?.time).toLocaleTimeString()}
+              </Text>
+            )}{" "}
           {/* "Seen" status for the last message */}
           {messages.length > 0 &&
             messages[1].sender === userId &&
@@ -471,11 +501,14 @@ export default function Chat(props) {
                   : "Not seen yet"}
               </Text>
             )}
-
           {/* Typing Indicator */}
-          {otherTyping && (
+          {otherTyping.length && (
             <View style={styles.typingIndicator}>
-              <Text style={styles.typingText}>Typing...</Text>
+              <Text style={styles.typingText}>
+                {otherTyping.length === 1
+                  ? `${otherTyping[0]} is typing...`
+                  : "Several people are typing..."}
+              </Text>
             </View>
           )}
           {/* Input Field */}
@@ -577,22 +610,6 @@ export default function Chat(props) {
 }
 
 export const styles = StyleSheet.create({
-  reactionText: {
-    fontSize: 40,
-
-  },
-  modalTitle: {
-    color: "white",
-    fontSize: 30,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  reactionsList: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10,
-    padding: 50,
-  },
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
@@ -678,9 +695,8 @@ export const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   typingIndicator: {
-    // alignSelf: "flex-center",
-    marginHorizontal: "auto",
-    textAlign: "center",
+    alignSelf: "flex-start",
+    marginLeft: 10,
     marginBottom: 5,
     paddingVertical: 5,
     paddingHorizontal: 10,
@@ -690,8 +706,6 @@ export const styles = StyleSheet.create({
   typingText: {
     color: "#666",
     fontStyle: "italic",
-    textAlign: "center",
-    fontSize: 15,
   },
   reactionPicker: {
     zIndex: 20,
@@ -884,8 +898,7 @@ export const styles = StyleSheet.create({
     textAlign: "right",
   },
   modalOverlay: {
-    // flex: 1,
-
+    flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",

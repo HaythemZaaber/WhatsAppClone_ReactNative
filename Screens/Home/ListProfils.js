@@ -35,50 +35,81 @@ export default function ListProfils(props) {
     });
 
     const fetchData = () => {
-      const listener = ref_tableProfils.on("value", async (snapshot) => {
+      const profileListeners = []; // To store real-time listeners for cleanup
+      const listener = ref_tableProfils.on("value", (snapshot) => {
         const profiles = [];
-        const promises = [];
+        const listeners = [];
 
         snapshot.forEach((unprofil) => {
           const profileData = unprofil.val();
           if (profileData.id !== userId) {
-            profiles.push(profileData);
-            promises.push(fetchLastMessage(profileData.id));
+            profiles.push({ ...profileData, lastMessage: "Loading..." });
+
+            // Setup a real-time listener for the last message
+            const discussionId =
+              userId > profileData.id
+                ? userId + profileData.id
+                : profileData.id + userId;
+
+            const lastMessageListener = ref_discussions
+              .child(discussionId)
+              .orderByChild("date")
+              .limitToLast(1)
+              .on("value", (messageSnapshot) => {
+                const message = messageSnapshot.val();
+
+                let lastMessage = "No messages yet"; // Default message
+                if (message) {
+                  const [key] = Object.keys(message);
+                  const lastMessageData = message[key];
+
+                  // Determine message type
+                  if (lastMessageData.type === "text") {
+                    lastMessage = lastMessageData.text;
+                  } else if (lastMessageData.type === "image") {
+                    lastMessage = "📷 Image";
+                  } else if (lastMessageData.type === "location") {
+                    lastMessage = "📍 Location";
+                  } else if (lastMessageData.type === "file") {
+                    lastMessage = "📁 File";
+                  } else {
+                    lastMessage = "Unknown message type";
+                  }
+                }
+
+                // Update last message for the relevant profile in state
+                setData((prevData) =>
+                  prevData.map((profile) =>
+                    profile.id === profileData.id
+                      ? { ...profile, lastMessage }
+                      : profile
+                  )
+                );
+              });
+
+            listeners.push(() =>
+              ref_discussions
+                .child(discussionId)
+                .off("value", lastMessageListener)
+            );
           }
-        });
-
-        const lastMessages = await Promise.all(promises);
-
-        profiles.forEach((profile, index) => {
-          profile.lastMessage = lastMessages[index];
         });
 
         setData(profiles);
         setLoading(false);
+
+        // Store the cleanup listeners for later use
+        profileListeners.push(...listeners);
       });
 
-      return () => ref_tableProfils.off("value", listener);
-    };
+      // Return a cleanup function
+      return () => {
+        // Remove listeners for profiles
+        profileListeners.forEach((cleanup) => cleanup());
 
-    const fetchLastMessage = (profileId) => {
-      return new Promise((resolve) => {
-        const discussionId =
-          userId > profileId ? userId + profileId : profileId + userId;
-
-        ref_discussions
-          .child(discussionId)
-          .orderByKey()
-          .limitToLast(1)
-          .once("value", (snapshot) => {
-            const message = snapshot.val();
-            if (message) {
-              const [key] = Object.keys(message);
-              resolve(message[key].text || "");
-            } else {
-              resolve("");
-            }
-          });
-      });
+        // Remove the main profile listener
+        ref_tableProfils.off("value", listener);
+      };
     };
 
     const listenerCleanup = fetchData();
@@ -92,8 +123,8 @@ export default function ListProfils(props) {
   useEffect(() => {
     const filtered = data.filter(
       (profile) =>
-        profile.nom.toLowerCase().includes(search.toLowerCase()) ||
-        profile.pseudo.toLowerCase().includes(search.toLowerCase())
+        profile?.nom?.toLowerCase().includes(search?.toLowerCase()) ||
+        profile?.pseudo?.toLowerCase().includes(search?.toLowerCase())
     );
     setFilteredData(filtered);
   }, [search, data]);
@@ -127,17 +158,20 @@ export default function ListProfils(props) {
           <Image
             source={
               item.profileImage
-              ? { uri: item.profileImage }
-              : require("../../assets/profil.png")
+                ? { uri: item.profileImage }
+                : require("../../assets/profil.png")
             }
             style={styles.profileImage}
           />
-            <View
-              style={[
-                styles.onlineDot,
-                { backgroundColor: item.status === "online" ? "green" : "gray" },
-              ]}
-            />
+
+          <View
+            style={[
+              styles.onlineDot,
+              {
+                backgroundColor: item?.isConnected ? "green" : "gray",
+              },
+            ]}
+          />
         </View>
         <View style={styles.textContainer}>
           <Text style={styles.contactName}>
@@ -319,6 +353,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: "#4CAF50",
     borderWidth: 2,
-    borderColor: "#fff", 
+    borderColor: "#fff",
   },
 });

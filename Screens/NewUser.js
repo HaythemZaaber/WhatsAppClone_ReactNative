@@ -10,12 +10,14 @@ import {
 import { useState } from "react";
 import firebase from "../Config";
 
+
 const auth = firebase.auth();
 
 export default function NewUser(props) {
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
+  const [loading, setLoading] = useState(false);
 
   return (
     <ImageBackground
@@ -64,8 +66,12 @@ export default function NewUser(props) {
             <Text style={styles.buttonText}>Back</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.submitButton}
+            style={[styles.submitButton, loading && styles.disabledButton]}
+            accessible
+            accessibilityLabel="Submit Button"
+            disabled={loading}
             onPress={() => {
+              setLoading(true);
               if (!email || !pwd || !confirmPwd) {
                 alert("Please fill in all fields.");
                 return;
@@ -74,10 +80,13 @@ export default function NewUser(props) {
               if (pwd === confirmPwd) {
                 auth
                   .createUserWithEmailAndPassword(email, pwd)
-                  .then(() => {
+                  .then(async () => {
+                    setLoading(false);
                     props.navigation.navigate("Home");
+                  
                   })
                   .catch((error) => {
+                    setLoading(false);
                     alert(error.message);
                   });
               } else {
@@ -85,7 +94,9 @@ export default function NewUser(props) {
               }
             }}
           >
-            <Text style={styles.buttonText}>Submit</Text>
+            <Text style={styles.buttonText}>
+              {loading ? "Loading..." : "Submit"}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -98,7 +109,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-   },
+  },
   card: {
     backgroundColor: "#0007",
     height: 400,
@@ -131,6 +142,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     width: "100%",
     marginTop: 10,
+  },
+  disabledButton: {
+    backgroundColor: "#A5D6A7",
   },
   submitButton: {
     backgroundColor: "#4CAF50",

@@ -145,6 +145,12 @@ export default function MyProfil(props) {
     }
 
     const userProfileRef = ref_tableProfils.child(`Profil${userId}`);
+
+    userProfileRef.once("value").then((snapshot) => {
+      if (!snapshot.exists()) {
+        userProfileRef.update({ isConnected: true });
+      }
+    });
     userProfileRef
       .update({
         id: userId,
@@ -257,6 +263,13 @@ export default function MyProfil(props) {
             await AsyncStorage.removeItem("email");
             await AsyncStorage.removeItem("password");
             props.navigation.replace("Auth");
+            const userProfileRef = ref_tableProfils.child(`Profil${userId}`);
+
+            userProfileRef.once("value").then((snapshot) => {
+              if (snapshot.exists()) {
+                userProfileRef.update({ isConnected: false });
+              }
+            });
           } catch (error) {
             Alert.alert("Logout Error", error.message);
           }

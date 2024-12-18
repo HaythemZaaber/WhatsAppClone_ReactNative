@@ -70,24 +70,31 @@ export default function Home() {
   const [profileExist, setProfileExist] = useState(false);
   const [loading, setLoading] = useState(true);
   const navigation = useNavigation();
-  const auth = firebase.auth().currentUser?.uid;
+  const userId = firebase.auth().currentUser?.uid;
 
   useEffect(() => {
-    if (!auth) {
+    if (!userId) {
       navigation.replace("Auth");
       return;
     }
 
-    const userProfileRef = ref_tableProfils.child(`Profil${auth}`);
+    const userProfileRef = ref_tableProfils.child(`Profil${userId}`);
+
+    userProfileRef.once("value").then((snapshot) => {
+      if (snapshot.exists()) {
+        userProfileRef.update({ isConnected: true });
+      }
+    });
 
     const handleProfileCheck = (snapshot) => {
-      setProfileExist(snapshot.val());
+      setProfileExist(!!snapshot.val());
       setLoading(false);
     };
 
     userProfileRef.on("value", handleProfileCheck);
+
     return () => userProfileRef.off("value", handleProfileCheck);
-  }, [auth, navigation]);
+  }, [userId, navigation]);
 
   if (loading) {
     return (
